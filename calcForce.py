@@ -9,6 +9,7 @@ import subprocess
 
 bohr = 0.52917706
 
+
 class AutoNumber(enum.Enum):
     def __new__(cls):
         value = len(cls.__members__) + 1
@@ -88,7 +89,6 @@ class Force:
         """
         return self.x * other.x + self.y * other.y + self.z * other.z
 
-
     @staticmethod
     def angle(force1, force2):
         """
@@ -118,7 +118,8 @@ class Atom:
     """
 
     def __init__(self):
-        self.force = Force()
+        self.qm_force = Force()
+        self.mm_force = Force()
         self.cord = Coordinate()
         self.seq = 0
         self.name = "Unknown"
@@ -142,8 +143,10 @@ class Molecule:
     def __init__(self):
         self.cord = Coordinate()
         self.atom_list = []
-        self.force = Force()
-        self.moment_of_force = Force()
+        self.qm_force = Force()
+        self.qm_moment_of_force = Force()
+        self.mm_force = Force()
+        self.mm_moment_of_force = Force()
 
     def calcCenter(self):
         cord = Coordinate()
@@ -199,7 +202,7 @@ def readGaussianlog(logfile):
                 line = next(it)
                 if len(line) == 0: continue
                 if "Forces" in line:
-                    next(it);
+                    next(it)
                     next(it)
                     while True:
                         line = next(it)
@@ -215,35 +218,42 @@ def readGaussianlog(logfile):
         return force_map
 
 
+def getQMForceMap(logfile):
+    return readGaussianlog(logfile)
+
+
+def getMMForceMap(xyzfile, keyfile):
+    return analyze(xyzfile, keyfile)
+
+
+def getMMForceMapFormFile(file):
+    force_map = {}
+    with open(sys.argv[2]) as forcefile:
+        lines = forcefile.readlines()
+        for line in lines:
+            if len(line) == 0: continue
+            keywords = line.split()
+            if len(keywords) == 0: continue
+            force_map[int(keywords[0])] = Force(float(keywords[3]),
+                                                float(keywords[4]),
+                                                float(keywords[5]))
+    return force_map
+
 
 def getForceMap():
     if len(sys.argv) == 3:
         if sys.argv[2][-4:] == ".log":
             return readGaussianlog(sys.argv[2])
         else:
-            force_map = {}
-            with open(sys.argv[2]) as forcefile:
-                lines = forcefile.readlines()
-                for line in lines:
-                    if len(line) == 0: continue
-                    keywords = line.split()
-                    if len(keywords) == 0: continue
-                    force_map[int(keywords[0])] = Force(float(keywords[3]),
-                                                        float(keywords[4]),
-                                                        float(keywords[5]))
-            return force_map
+            return getMMForceMapFormFile(sys.argv[2])
     else:
         return analyze(sys.argv[2], sys.argv[3])
 
 
-def main():
-    if len(sys.argv) != 3 and len(sys.argv) != 4:
-        print("Wrong number arguments")
-        exit(1)
-
+def readxyz(xyzfile):
     atom_map = {}
     mol_list = []
-    with open(sys.argv[1]) as xyz:
+    with open(xyzfile) as xyz:
         lines = xyz.readlines()
         line = lines.pop(0)
         keywords = line.split()
@@ -285,43 +295,79 @@ def main():
 
         for mol in mol_list:
             mol.moltype = checkMoltype(mol)
-    force_map = getForceMap()
+
+    return atom_map, mol_list
+
+
+def main():
+    if len(sys.argv) != 5:
+        print("Wrong number arguments")
+        exit(1)
+
+    atom_map, mol_list = readxyz(sys.argv[1])
+    mm_force_map = getMMForceMap(sys.argv[2], sys.argv[3])
+    qm_force_map = getQMForceMap(sys.argv[4])
 
     for seq, atom in atom_map.items():
-        atom.force = force_map[seq]
+        atom.qm_force = qm_force_map[seq]
+        atom.mm_force = mm_force_map[seq]
 
     # start to calculate force on molecules
 
     i = 1
     for mol in mol_list:
-        force = Force()
-        moment_of_force = Force()
+        qm_force = Force()
+        qm_moment_of_force = Force()
+        mm_force = Force()
+        mm_moment_of_force = Force()
         mol.calcCenter()
         mol.mol_no = i
         i += 1
         for atom in mol.atom_list:
-            force += atom.force
-            moment_of_force += multipy_cord_force(atom.cord - mol.cord, atom.force)
-        mol.force = force
-        mol.moment_of_force = moment_of_force
+            qm_force += atom.qm_force
+            qm_moment_of_force += multipy_cord_force(atom.cord - mol.cord, atom.qm_force)
+            mm_force += atom.mm_force
+            mm_moment_of_force += multipy_cord_force(atom.cord - mol.cord, atom.mm_force)
+
+        mol.qm_force = qm_force
+        mol.qm_moment_of_force = qm_moment_of_force
+        mol.mm_force = mm_force
+        mol.mm_moment_of_force = mm_moment_of_force
+
 
     # print force to screen
-    print("Forces on Molecules (kcal/bohr)")
+    print("QM     Forces on Molecules (kcal/bohr)")
     print("NO.      type                 X              Y               Z          leng")
     for mol in mol_list:
         print("%d     %s   %17.8f%15.8f%15.8f%15.8f"
-              % (mol.mol_no, mol.moltype, mol.force.x, mol.force.y, mol.force.z, abs(mol.force)))
+              % (mol.mol_no, mol.moltype, mol.qm_force.x, mol.qm_force.y, mol.qm_force.z, abs(mol.qm_force)))
 
+    print("MM     Forces on Molecules (kcal/bohr)")
+    print("NO.      type                 X              Y               Z          leng")
+    for mol in mol_list:
+        print("%d     %s   %17.8f%15.8f%15.8f%15.8f"
+              % (mol.mol_no, mol.moltype, mol.mm_force.x, mol.mm_force.y, mol.mm_force.z, abs(mol.mm_force)))
 
-    print("\nMoment of forces on Molecules (kcal)")
+    print("\nQM    Moment of forces on Molecules (kcal)")
     print("NO.      type                 X              Y               Z")
     for mol in mol_list:
         print("%d     %s   %17.8f%15.8f%15.8f" %
-              (mol.mol_no, mol.moltype, mol.moment_of_force.x / bohr,
-               mol.moment_of_force.y / bohr,
-               mol.moment_of_force.z / bohr))
+              (mol.mol_no, mol.moltype, mol.qm_moment_of_force.x / bohr,
+               mol.qm_moment_of_force.y / bohr,
+               mol.qm_moment_of_force.z / bohr))
 
-    print("\nThe force angle (degree)")
+    print("\nMM    Moment of forces on Molecules (kcal)")
+    print("NO.      type                 X              Y               Z")
+    for mol in mol_list:
+        print("%d     %s   %17.8f%15.8f%15.8f" %
+              (mol.mol_no, mol.moltype, mol.mm_moment_of_force.x / bohr,
+               mol.mm_moment_of_force.y / bohr,
+               mol.mm_moment_of_force.z / bohr))
+
+
+
+
+    print("\nQM force angle (degree)")
     print(" mol1 NO.     mol1 NO.      angle(degree)")
 
     it1 = iter(mol_list)
@@ -332,31 +378,46 @@ def main():
             try:
                 while True:
                     mol2 = next(it2)
-                    angle = math.degrees(Force.angle(mol1.force, mol2.force))
+                    angle = math.degrees(Force.angle(mol1.qm_force, mol2.qm_force))
                     print("%4d%14d%19.3f" % (mol1.mol_no, mol2.mol_no, angle))
             except StopIteration:
                 pass
     except  StopIteration:
         pass
 
-    mol1 = mol_list.pop(0)
-    mol2 = mol_list.pop(0)
-    cord = mol1.cord - mol2.cord
-    vector12 = Force(cord.x, cord.y, cord.z)
-    angle1 = math.degrees(Force.angle(mol1.force, vector12))
-    angle2 = math.degrees(Force.angle(mol2.force, vector12))
+    print("\nMM force angle (degree)")
+    print(" mol1 NO.     mol1 NO.      angle(degree)")
 
-    print(angle1, angle2)
-
-    qmforce1 = Force(0.83151531, -1.859342112, -0.911324525)
-    qmforce2 = Force(0.828494525, 0.52586006, 0.265257428)
-    qmangle1 = math.degrees(Force.angle(qmforce1, vector12))
-    qmangle2 = math.degrees(Force.angle(qmforce2, vector12))
-
-    print(qmangle1, qmangle2)
-
-
-
+    it1 = iter(mol_list)
+    try:
+        while True:
+            mol1 = next(it1)
+            it2 = copy.deepcopy(it1)
+            try:
+                while True:
+                    mol2 = next(it2)
+                    angle = math.degrees(Force.angle(mol1.mm_force, mol2.mm_force))
+                    print("%4d%14d%19.3f" % (mol1.mol_no, mol2.mol_no, angle))
+            except StopIteration:
+                pass
+    except  StopIteration:
+        pass
+    #
+    # mol1 = mol_list.pop(0)
+    # mol2 = mol_list.pop(0)
+    # cord = mol1.cord - mol2.cord
+    # vector12 = Force(cord.x, cord.y, cord.z)
+    # angle1 = math.degrees(Force.angle(mol1.force, vector12))
+    # angle2 = math.degrees(Force.angle(mol2.force, vector12))
+    #
+    # print(angle1, angle2)
+    #
+    # qmforce1 = Force(0.83151531, -1.859342112, -0.911324525)
+    # qmforce2 = Force(0.828494525, 0.52586006, 0.265257428)
+    # qmangle1 = math.degrees(Force.angle(qmforce1, vector12))
+    # qmangle2 = math.degrees(Force.angle(qmforce2, vector12))
+    #
+    # print(qmangle1, qmangle2)
 
     print("\n Missing Complete")
 
