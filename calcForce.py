@@ -189,19 +189,49 @@ def analyze(xyzfile, keyfile):
     return force_map
 
 
+def readGaussianlog(logfile):
+    force_map = {}
+    with open(logfile) as log:
+        it = iter(log)
+        next(it)
+        try:
+            while True:
+                line = next(it)
+                if len(line) == 0: continue
+                if "Forces" in line:
+                    next(it);
+                    next(it)
+                    while True:
+                        line = next(it)
+                        keywords = line.split()
+                        if len(keywords) != 5: raise StopIteration
+
+                        force_map[int(keywords[0])] = Force(float(keywords[2]) * 627.5,
+                                                            float(keywords[3]) * 627.5,
+                                                            float(keywords[4]) * 627.5)
+        except StopIteration:
+            pass
+
+        return force_map
+
+
+
 def getForceMap():
     if len(sys.argv) == 3:
-        force_map = {}
-        with open(sys.argv[2]) as forcefile:
-            lines = forcefile.readlines()
-            for line in lines:
-                if len(line) == 0: continue
-                keywords = line.split()
-                if len(keywords) == 0: continue
-                force_map[int(keywords[0])] = Force(float(keywords[3]),
-                                                    float(keywords[4]),
-                                                    float(keywords[5]))
-        return force_map
+        if sys.argv[2][-4:] == ".log":
+            return readGaussianlog(sys.argv[2])
+        else:
+            force_map = {}
+            with open(sys.argv[2]) as forcefile:
+                lines = forcefile.readlines()
+                for line in lines:
+                    if len(line) == 0: continue
+                    keywords = line.split()
+                    if len(keywords) == 0: continue
+                    force_map[int(keywords[0])] = Force(float(keywords[3]),
+                                                        float(keywords[4]),
+                                                        float(keywords[5]))
+            return force_map
     else:
         return analyze(sys.argv[2], sys.argv[3])
 
