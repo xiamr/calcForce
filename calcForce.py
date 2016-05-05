@@ -251,6 +251,7 @@ def main():
 
     print("\nThe force angle (degree)")
     print(" mol1 NO.     mol1 NO.      angle(degree)")
+
     it1 = iter(mol_list)
     try:
         while True:
@@ -266,7 +267,21 @@ def main():
     except  StopIteration:
         pass
 
+    mol1 = mol_list.pop(0)
+    mol2 = mol_list.pop(0)
+    cord = mol1.cord - mol2.cord
+    vector12 = Force(cord.x, cord.y, cord.z)
+    angle1 = math.degrees(Force.angle(mol1.force, vector12))
+    angle2 = math.degrees(Force.angle(mol2.force, vector12))
 
+    print(angle1, angle2)
+
+    qmforce1 = Force(0.83151531, -1.859342112, -0.911324525)
+    qmforce2 = Force(0.828494525, 0.52586006, 0.265257428)
+    qmangle1 = math.degrees(Force.angle(qmforce1, vector12))
+    qmangle2 = math.degrees(Force.angle(qmforce2, vector12))
+
+    print(qmangle1, qmangle2)
 
 
 
