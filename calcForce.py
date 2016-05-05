@@ -4,6 +4,7 @@ import sys
 import os.path
 import math
 import enum
+import copy
 
 bohr = 0.52917706
 
@@ -84,7 +85,8 @@ class Force:
 
         :type other: Force
         """
-        return math.sqrt(self.x * other.x + self.y * other.y + self.z * other.z)
+        return self.x * other.x + self.y * other.y + self.z * other.z
+
 
     @staticmethod
     def angle(force1, force2):
@@ -140,7 +142,6 @@ class Molecule:
         self.cord = Coordinate()
         self.atom_list = []
         self.force = Force()
-        self.moltype = None
         self.moment_of_force = Force()
 
     def calcCenter(self):
@@ -219,10 +220,13 @@ def main():
 
     # start to calculate force on molecules
 
+    i = 1
     for mol in mol_list:
         force = Force()
         moment_of_force = Force()
         mol.calcCenter()
+        mol.mol_no = i
+        i += 1
         for atom in mol.atom_list:
             force += atom.force
             moment_of_force += multipy_cord_force(atom.cord - mol.cord, atom.force)
@@ -231,22 +235,41 @@ def main():
 
     # print force to screen
     print("Forces on Molecules (kcal/bohr)")
-    print("num     type                 X              Y               Z")
-    i = 1
+    print("NO.      type                 X              Y               Z          leng")
     for mol in mol_list:
-        print("%d     %s   %17.8f%15.8f%15.8f"
-              % (i, mol.moltype, mol.force.x, mol.force.y, mol.force.z))
-        i += 1
+        print("%d     %s   %17.8f%15.8f%15.8f%15.8f"
+              % (mol.mol_no, mol.moltype, mol.force.x, mol.force.y, mol.force.z, abs(mol.force)))
+
 
     print("\nMoment of forces on Molecules (kcal)")
-    print("num     type                 X              Y               Z")
-    i = 1
+    print("NO.      type                 X              Y               Z")
     for mol in mol_list:
         print("%d     %s   %17.8f%15.8f%15.8f" %
-              (i, mol.moltype, mol.moment_of_force.x / bohr,
+              (mol.mol_no, mol.moltype, mol.moment_of_force.x / bohr,
                mol.moment_of_force.y / bohr,
                mol.moment_of_force.z / bohr))
-        i += 1
+
+    print("\nThe force angle (degree)")
+    print(" mol1 NO.     mol1 NO.      angle(degree)")
+    it1 = iter(mol_list)
+    try:
+        while True:
+            mol1 = next(it1)
+            it2 = copy.deepcopy(it1)
+            try:
+                while True:
+                    mol2 = next(it2)
+                    angle = math.degrees(Force.angle(mol1.force, mol2.force))
+                    print("%4d%14d%19.3f" % (mol1.mol_no, mol2.mol_no, angle))
+            except StopIteration:
+                pass
+    except  StopIteration:
+        pass
+
+
+
+
+
 
     print("\n Missing Complete")
 
