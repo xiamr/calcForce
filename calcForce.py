@@ -5,6 +5,7 @@ import os.path
 import math
 import enum
 import copy
+import subprocess
 
 bohr = 0.52917706
 
@@ -154,8 +155,59 @@ class Molecule:
         cord.z /= leng
         self.cord = cord
 
+
+def analyze(xyzfile, keyfile):
+    while len(xyzfile) == 0:
+        xyzfile = input("Enter xyz file:")
+    while len(keyfile) == 0:
+        keyfile = input("Enter key file:")
+    analyz = subprocess.Popen(["analyze.exe", xyzfile, "-k", keyfile, "F"], stdout=subprocess.PIPE)
+    out, err = analyz.communicate()
+    lines = out.decode().splitlines()
+    it = iter(lines)
+    next(it)
+    force_map = {}
+    try:
+        while True:
+            line = next(it)
+            if len(line) == 0: continue
+            if "Forces" in line:
+                next(it)
+                next(it)
+                next(it)
+                while True:
+                    line = next(it)
+                    if len(line) == 0: raise StopIteration
+                    keywords = line.split()
+                    force_map[int(keywords[0])] = Force(float(keywords[3]),
+                                                        float(keywords[4]),
+                                                        float(keywords[5]))
+
+    except StopIteration:
+        pass
+
+    return force_map
+
+
+def getForceMap():
+    if len(sys.argv) == 3:
+        force_map = {}
+        with open(sys.argv[2]) as forcefile:
+            lines = forcefile.readlines()
+            for line in lines:
+                if len(line) == 0: continue
+                keywords = line.split()
+                if len(keywords) == 0: continue
+                force_map[int(keywords[0])] = Force(float(keywords[3]),
+                                                    float(keywords[4]),
+                                                    float(keywords[5]))
+        return force_map
+    else:
+        return analyze(sys.argv[2], sys.argv[3])
+
+
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 3 and len(sys.argv) != 4:
         print("Wrong number arguments")
         exit(1)
 
@@ -203,18 +255,8 @@ def main():
 
         for mol in mol_list:
             mol.moltype = checkMoltype(mol)
-    force_map = {}
-    with open(sys.argv[2]) as forcefile:
-        lines = forcefile.readlines()
-        for line in lines:
-            if len(line) == 0: continue
-            keywords = line.split()
-            if len(keywords) == 0: continue
-            force = Force()
-            force.x = float(keywords[3])
-            force.y = float(keywords[4])
-            force.z = float(keywords[5])
-            force_map[int(keywords[0])] = force
+    force_map = getForceMap()
+
     for seq, atom in atom_map.items():
         atom.force = force_map[seq]
 
