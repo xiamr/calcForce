@@ -6,6 +6,7 @@ import math
 import enum
 import copy
 import subprocess
+import argparse
 
 bohr = 0.52917706
 
@@ -304,9 +305,18 @@ def main():
         print("Wrong number arguments")
         exit(1)
 
-    atom_map, mol_list = readxyz(sys.argv[1])
-    mm_force_map = getMMForceMap(sys.argv[2], sys.argv[3])
-    qm_force_map = getQMForceMap(sys.argv[4])
+
+    paser = argparse.ArgumentParser(description="Process QM and MM forces for AMOBEA")
+    paser.add_argument('xyzfile',help="Tinker xyz file that contain the structure")
+    paser.add_argument("--xyz",help="The xyz file that pass to analyze")
+    paser.add_argument('-k','--key',help="Tinker key file that contain forcefield parameters")
+    paser.add_argument('-l','--log',help="Gaussian log file that contain Forces info")
+    args = paser.parse_args()
+
+
+    atom_map, mol_list = readxyz(args.xyzfile)
+    mm_force_map = getMMForceMap(args.xyz, args.key)
+    qm_force_map = getQMForceMap(args.log)
 
     for seq, atom in atom_map.items():
         atom.qm_force = qm_force_map[seq]
