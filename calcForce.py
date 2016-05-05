@@ -5,6 +5,7 @@ import os.path
 import math
 import enum
 
+bohr = 0.52917706
 
 class AutoNumber(enum.Enum):
     def __new__(cls):
@@ -17,6 +18,22 @@ class AutoNumber(enum.Enum):
 class MolType(AutoNumber):
     A = ()
     B = ()
+
+
+class Coordinate:
+    def __init__(self, x=0.0, y=0.0, z=0.0):
+        self.x = x
+        self.y = y
+        self.z = z
+
+    def __sub__(self, other):
+        return Coordinate(self.x - other.x, self.y - other.y, self.z - other.z)
+
+    def __iadd__(self, other):
+        self.x += other.x
+        self.y += other.y
+        self.z += other.z
+        return self
 
 
 class Force:
@@ -79,11 +96,15 @@ class Force:
         return math.acos(force1 * force2 / (abs(force1) * abs(force2)))
 
 
-class Coordinate:
-    def __init__(self, x=0.0, y=0.0, z=0.0):
-        self.x = x
-        self.y = y
-        self.z = z
+def multipy_cord_force(cord, force):
+    """
+
+    :type cord: Coordinate
+    :type force: Force
+    """
+    return Force(cord.z * force.y - cord.y * force.z,
+                 cord.x * force.z - cord.z * force.x,
+                 cord.y * force.x - cord.x * force.y)
 
 
 class Atom:
@@ -120,7 +141,17 @@ class Molecule:
         self.atom_list = []
         self.force = Force()
         self.moltype = None
+        self.moment_of_force = Force()
 
+    def calcCenter(self):
+        cord = Coordinate()
+        for atom in self.atom_list:
+            cord += atom.cord
+        leng = len(self.atom_list)
+        cord.x /= leng
+        cord.y /= leng
+        cord.z /= leng
+        self.cord = cord
 
 def main():
     if len(sys.argv) != 3:
@@ -190,9 +221,13 @@ def main():
 
     for mol in mol_list:
         force = Force()
+        moment_of_force = Force()
+        mol.calcCenter()
         for atom in mol.atom_list:
             force += atom.force
+            moment_of_force += multipy_cord_force(atom.cord - mol.cord, atom.force)
         mol.force = force
+        mol.moment_of_force = moment_of_force
 
     # print force to screen
     print("Forces on Molecules (kcal/bohr)")
@@ -202,6 +237,17 @@ def main():
         print("%d     %s   %17.8f%15.8f%15.8f"
               % (i, mol.moltype, mol.force.x, mol.force.y, mol.force.z))
         i += 1
+
+    print("\nMoment of forces on Molecules (kcal)")
+    print("num     type                 X              Y               Z")
+    i = 1
+    for mol in mol_list:
+        print("%d     %s   %17.8f%15.8f%15.8f" %
+              (i, mol.moltype, mol.moment_of_force.x / bohr,
+               mol.moment_of_force.y / bohr,
+               mol.moment_of_force.z / bohr))
+        i += 1
+
     print("\n Missing Complete")
 
 
